@@ -301,6 +301,66 @@ export default function AdminPage() {
 
         </div>
 
+{/* SAVINGS SUMMARY */}
+
+<section className="mb-8 rounded-2xl border border-slate-800 bg-slate-900 overflow-hidden">
+  <div className="p-6 border-b border-slate-800">
+    <p className="text-sm text-purple-400 font-semibold mb-2">
+      💰 SAVINGS SUMMARY
+    </p>
+
+    <h2 className="text-2xl font-bold">
+      Member Savings
+    </h2>
+
+    <p className="text-slate-400 mt-1">
+      Quick overview of how much each member has saved.
+    </p>
+  </div>
+
+  <div className="divide-y divide-slate-800">
+    {users
+      .filter((member) => member.role === "user")
+      .sort(
+        (a, b) =>
+          Number(b.total_saved || 0) -
+          Number(a.total_saved || 0)
+      )
+      .map((member) => (
+        <div
+          key={member.id}
+          className="flex items-center justify-between gap-4 px-6 py-5 hover:bg-slate-800/40"
+        >
+          <div>
+            <p className="font-semibold text-white">
+              {member.username}
+            </p>
+
+            <p className="text-sm text-slate-400 mt-1">
+              {member.completed_weeks} / 50 weeks completed
+            </p>
+          </div>
+
+          <div className="text-right">
+            <p className="text-lg font-bold text-emerald-400">
+              ₱{Number(member.total_saved || 0).toFixed(2)}
+            </p>
+
+            <p className="text-xs text-slate-500">
+              {Number(member.progress || 0).toFixed(1)}% complete
+            </p>
+          </div>
+        </div>
+      ))}
+
+    {users.filter((member) => member.role === "user").length === 0 && (
+      <div className="p-6 text-center text-slate-400">
+        No member savings found.
+      </div>
+    )}
+  </div>
+</section>
+
         {/* MEMBERS */}
 
         <section className="rounded-2xl border border-slate-800 bg-slate-900 overflow-hidden">
