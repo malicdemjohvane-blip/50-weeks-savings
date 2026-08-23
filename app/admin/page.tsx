@@ -288,18 +288,23 @@ export default function AdminPage() {
 
         </div>
 
-        {/* REFRESH */}
+{/* REPORT CONTROLS */}
 
-        <div className="flex justify-end mb-5">
+<div className="flex flex-wrap justify-end gap-3 mb-5">
+  <button
+    onClick={() => router.push("/admin/report")}
+    className="rounded-xl bg-purple-500 px-4 py-2 text-sm font-bold text-white hover:bg-purple-400"
+  >
+    📊 Savings Report
+  </button>
 
-          <button
-            onClick={loadAdminData}
-            className="rounded-xl bg-slate-800 px-4 py-2 text-sm font-semibold hover:bg-slate-700"
-          >
-            🔄 Refresh
-          </button>
-
-        </div>
+  <button
+    onClick={loadAdminData}
+    className="rounded-xl bg-slate-800 px-4 py-2 text-sm font-semibold hover:bg-slate-700"
+  >
+    🔄 Refresh
+  </button>
+</div>
 
 {/* SAVINGS SUMMARY */}
 
