@@ -22,11 +22,25 @@ type Statistics = {
   total_users: number;
 };
 
+type PendingSaving = {
+  id: number;
+  user_id: string;
+  week: number;
+  amount: number;
+  saved: boolean;
+  approval_status: string;
+  username: string;
+};
+
 export default function AdminPage() {
   const router = useRouter();
   const supabase = createClient();
 
   const [users, setUsers] = useState<UserSummary[]>([]);
+  const [pendingSavings, setPendingSavings] = useState<PendingSaving[]>(
+    []
+  );
+
   const [statistics, setStatistics] = useState<Statistics>({
     total_saved: 0,
     active_users: 0,
@@ -54,11 +68,12 @@ export default function AdminPage() {
       return;
     }
 
-    const { data: profile, error: profileError } = await supabase
-      .from("profiles")
-      .select("id, username, role, active")
-      .eq("id", user.id)
-      .single();
+    const { data: profile, error: profileError } =
+      await supabase
+        .from("profiles")
+        .select("id, username, role, active")
+        .eq("id", user.id)
+        .single();
 
     if (profileError || !profile) {
       setMessage("Unable to load your profile.");
@@ -71,6 +86,10 @@ export default function AdminPage() {
       return;
     }
 
+    // -----------------------------------------
+    // LOAD MEMBER SUMMARY
+    // -----------------------------------------
+
     const { data: summaryData, error: summaryError } =
       await supabase.rpc("get_users_summary");
 
@@ -80,28 +99,157 @@ export default function AdminPage() {
       setUsers(summaryData || []);
     }
 
-    const { data: statisticsData, error: statisticsError } =
-      await supabase.rpc("get_admin_statistics");
+    // -----------------------------------------
+    // LOAD STATISTICS
+    // -----------------------------------------
+
+    const {
+      data: statisticsData,
+      error: statisticsError,
+    } = await supabase.rpc("get_admin_statistics");
 
     if (!statisticsError && statisticsData?.length) {
       setStatistics(statisticsData[0]);
     }
 
+    // -----------------------------------------
+    // LOAD PENDING SAVINGS
+    // -----------------------------------------
+
+    const { data: pendingData, error: pendingError } =
+      await supabase
+        .from("savings")
+        .select(
+          `
+          id,
+          user_id,
+          week,
+          amount,
+          saved,
+          approval_status,
+          profiles!savings_user_id_fkey (
+            username
+          )
+        `
+        )
+        .eq("approval_status", "pending")
+        .order("updated_at", {
+          ascending: false,
+        });
+
+    if (pendingError) {
+      console.error("Pending savings error:", pendingError);
+      setMessage(pendingError.message);
+    } else {
+      const formattedPending: PendingSaving[] =
+        (pendingData || []).map((item: any) => ({
+          id: item.id,
+          user_id: item.user_id,
+          week: item.week,
+          amount: Number(item.amount || 0),
+          saved: item.saved,
+          approval_status: item.approval_status,
+          username:
+            item.profiles?.username || "Unknown Member",
+        }));
+
+      setPendingSavings(formattedPending);
+    }
+
     setLoading(false);
   }
 
-  async function resetSavings(userId: string, username: string) {
+  // -----------------------------------------
+  // APPROVE SAVING
+  // -----------------------------------------
+
+  async function approveSaving(
+    savingId: number,
+    username: string,
+    week: number
+  ) {
+    const confirmed = window.confirm(
+      `Approve ${username}'s Week ${week} savings?`
+    );
+
+    if (!confirmed) return;
+
+    const { error } = await supabase
+      .from("savings")
+      .update({
+        approval_status: "approved",
+        saved: true,
+      })
+      .eq("id", savingId);
+
+    if (error) {
+      setMessage(`Approval failed: ${error.message}`);
+      return;
+    }
+
+    setMessage(
+      `${username}'s Week ${week} savings has been approved.`
+    );
+
+    await loadAdminData();
+  }
+
+  // -----------------------------------------
+  // REJECT SAVING
+  // -----------------------------------------
+
+  async function rejectSaving(
+    savingId: number,
+    username: string,
+    week: number
+  ) {
+    const confirmed = window.confirm(
+      `Reject ${username}'s Week ${week} savings?\n\nThe amount will return to ₱0.00.`
+    );
+
+    if (!confirmed) return;
+
+    const { error } = await supabase
+      .from("savings")
+      .update({
+        amount: 0,
+        saved: false,
+        approval_status: "not_saved",
+      })
+      .eq("id", savingId);
+
+    if (error) {
+      setMessage(`Rejection failed: ${error.message}`);
+      return;
+    }
+
+    setMessage(
+      `${username}'s Week ${week} savings was rejected.`
+    );
+
+    await loadAdminData();
+  }
+
+  // -----------------------------------------
+  // RESET SAVINGS
+  // -----------------------------------------
+
+  async function resetSavings(
+    userId: string,
+    username: string
+  ) {
     const confirmed = window.confirm(
       `Reset all savings for ${username}?\n\nAll 50 weeks will be returned to ₱0.00.`
     );
 
-    if (!confirmed) {
-      return;
-    }
+    if (!confirmed) return;
 
-    const { error } = await supabase.rpc("admin_reset_savings", {
-      target_user_id: userId,
-    });
+    const { error } = await supabase.rpc(
+      "admin_reset_savings",
+      {
+        target_user_id: userId,
+      }
+    );
 
     if (error) {
       setMessage(error.message);
@@ -113,18 +261,26 @@ export default function AdminPage() {
     await loadAdminData();
   }
 
-  async function deactivateUser(userId: string, username: string) {
+  // -----------------------------------------
+  // DEACTIVATE
+  // -----------------------------------------
+
+  async function deactivateUser(
+    userId: string,
+    username: string
+  ) {
     const confirmed = window.confirm(
       `Deactivate ${username}?\n\nThey will no longer be able to use the savings dashboard.`
     );
 
-    if (!confirmed) {
-      return;
-    }
+    if (!confirmed) return;
 
-    const { error } = await supabase.rpc("admin_deactivate_user", {
-      target_user_id: userId,
-    });
+    const { error } = await supabase.rpc(
+      "admin_deactivate_user",
+      {
+        target_user_id: userId,
+      }
+    );
 
     if (error) {
       setMessage(error.message);
@@ -136,18 +292,26 @@ export default function AdminPage() {
     await loadAdminData();
   }
 
-  async function activateUser(userId: string, username: string) {
+  // -----------------------------------------
+  // ACTIVATE
+  // -----------------------------------------
+
+  async function activateUser(
+    userId: string,
+    username: string
+  ) {
     const confirmed = window.confirm(
       `Activate ${username}?`
     );
 
-    if (!confirmed) {
-      return;
-    }
+    if (!confirmed) return;
 
-    const { error } = await supabase.rpc("admin_activate_user", {
-      target_user_id: userId,
-    });
+    const { error } = await supabase.rpc(
+      "admin_activate_user",
+      {
+        target_user_id: userId,
+      }
+    );
 
     if (error) {
       setMessage(error.message);
@@ -159,14 +323,19 @@ export default function AdminPage() {
     await loadAdminData();
   }
 
-  async function deleteUser(userId: string, username: string) {
+  // -----------------------------------------
+  // DELETE
+  // -----------------------------------------
+
+  async function deleteUser(
+    userId: string,
+    username: string
+  ) {
     const confirmed = window.confirm(
-      `DELETE ${username}?\n\nThis will permanently delete the member profile and their savings records.\n\nThis cannot be undone.`
+      `DELETE ${username}?\n\nThis will permanently delete the member profile and savings records.\n\nThis cannot be undone.`
     );
 
-    if (!confirmed) {
-      return;
-    }
+    if (!confirmed) return;
 
     const { error } = await supabase.rpc(
       "admin_delete_member_profile",
@@ -185,16 +354,24 @@ export default function AdminPage() {
     await loadAdminData();
   }
 
+  // -----------------------------------------
+  // SIGN OUT
+  // -----------------------------------------
+
   async function signOut() {
     await supabase.auth.signOut();
     router.push("/login");
   }
 
+  // -----------------------------------------
+  // LOADING
+  // -----------------------------------------
+
   if (loading) {
     return (
-      <main className="min-h-screen bg-slate-950 text-white flex items-center justify-center">
+      <main className="min-h-screen bg-slate-950 text-white flex items-center justify-center px-4">
         <div className="text-center">
-          <div className="text-4xl mb-4">💰</div>
+          <div className="text-5xl mb-4">💰</div>
           <p className="text-slate-400">
             Loading admin dashboard...
           </p>
@@ -203,223 +380,381 @@ export default function AdminPage() {
     );
   }
 
+  const memberUsers = users.filter(
+    (member) => member.role === "user"
+  );
+
   return (
-    <main className="min-h-screen bg-slate-950 text-white p-6">
-      <div className="max-w-7xl mx-auto">
+    <main className="min-h-screen w-full overflow-x-hidden bg-slate-950 text-white px-4 py-5 sm:px-6 sm:py-8">
+
+      <div className="w-full max-w-7xl mx-auto">
 
         {/* HEADER */}
 
-        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-8">
+        <header className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-5 mb-8">
 
           <div>
-            <p className="text-sm text-purple-400 font-semibold mb-2">
+            <p className="text-sm text-purple-400 font-bold">
               ADMIN
             </p>
 
-            <h1 className="text-4xl font-bold">
+            <h1 className="text-3xl sm:text-4xl font-black mt-1">
               Savings Dashboard
             </h1>
 
             <p className="text-slate-400 mt-2">
-              Manage your 50 Weeks Savings Challenge
+              Manage Let&apos;s Save Joh
             </p>
           </div>
 
           <button
             onClick={signOut}
-            className="rounded-xl bg-red-500/15 px-4 py-3 text-red-300 hover:bg-red-500/25"
+            className="w-full sm:w-auto rounded-xl bg-red-500/15 px-5 py-3 text-red-300 font-semibold hover:bg-red-500/25"
           >
             🚪 Sign Out
           </button>
 
-        </div>
+        </header>
 
         {/* MESSAGE */}
 
         {message && (
-          <div className="mb-6 rounded-xl border border-slate-700 bg-slate-900 px-5 py-4 text-slate-200">
+          <div className="mb-6 rounded-xl border border-slate-700 bg-slate-900 px-5 py-4 text-sm text-slate-200">
             {message}
           </div>
         )}
 
+        {/* PENDING APPROVALS */}
+
+        <section className="mb-8 rounded-2xl border border-red-500/30 bg-red-500/5 overflow-hidden">
+
+          <div className="p-5 sm:p-6 border-b border-red-500/20">
+
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+
+              <div>
+                <p className="text-sm font-bold text-red-400">
+                  🔴 APPROVAL CENTER
+                </p>
+
+                <h2 className="text-2xl font-black mt-1">
+                  Pending Savings
+                </h2>
+
+                <p className="text-sm text-slate-400 mt-1">
+                  Review savings submitted by members.
+                </p>
+              </div>
+
+              <div className="self-start rounded-full bg-red-500 px-4 py-2 text-sm font-black text-white">
+                {pendingSavings.length} PENDING
+              </div>
+
+            </div>
+
+          </div>
+
+          {pendingSavings.length === 0 ? (
+
+            <div className="p-8 text-center">
+
+              <div className="text-5xl mb-3">
+                🎉
+              </div>
+
+              <p className="font-semibold">
+                No pending savings
+              </p>
+
+              <p className="text-sm text-slate-500 mt-1">
+                You&apos;re all caught up!
+              </p>
+
+            </div>
+
+          ) : (
+
+            <div className="divide-y divide-slate-800">
+
+              {pendingSavings.map((saving) => (
+
+                <div
+                  key={saving.id}
+                  className="p-5 sm:p-6"
+                >
+
+                  <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-5">
+
+                    <div className="min-w-0">
+
+                      <div className="flex flex-wrap items-center gap-2">
+
+                        <h3 className="text-lg font-bold">
+                          {saving.username}
+                        </h3>
+
+                        <span className="rounded-full bg-red-500/15 px-3 py-1 text-xs font-bold text-red-300">
+                          PENDING
+                        </span>
+
+                      </div>
+
+                      <div className="mt-2 text-sm text-slate-400">
+                        Week {saving.week}
+                      </div>
+
+                    </div>
+
+                    <div className="flex flex-col sm:flex-row sm:items-center gap-4">
+
+                      <div className="text-left sm:text-right">
+
+                        <p className="text-xs text-slate-500">
+                          AMOUNT SUBMITTED
+                        </p>
+
+                        <p className="text-2xl font-black text-yellow-400">
+                          ₱
+                          {saving.amount.toLocaleString(
+                            "en-PH",
+                            {
+                              minimumFractionDigits: 2,
+                            }
+                          )}
+                        </p>
+
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-2">
+
+                        <button
+                          onClick={() =>
+                            approveSaving(
+                              saving.id,
+                              saving.username,
+                              saving.week
+                            )
+                          }
+                          className="min-h-11 rounded-xl bg-emerald-500 px-4 py-2 text-sm font-bold text-black hover:bg-emerald-400"
+                        >
+                          ✅ Approve
+                        </button>
+
+                        <button
+                          onClick={() =>
+                            rejectSaving(
+                              saving.id,
+                              saving.username,
+                              saving.week
+                            )
+                          }
+                          className="min-h-11 rounded-xl bg-red-500/20 px-4 py-2 text-sm font-bold text-red-300 hover:bg-red-500/30"
+                        >
+                          ❌ Reject
+                        </button>
+
+                      </div>
+
+                    </div>
+
+                  </div>
+
+                </div>
+
+              ))}
+
+            </div>
+
+          )}
+
+        </section>
+
         {/* STATISTICS */}
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 mb-8">
+        <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
 
           <div className="rounded-2xl border border-slate-800 bg-slate-900 p-6">
-            <p className="text-sm text-slate-400">
+
+            <p className="text-xs text-slate-400">
               TOTAL SAVED
             </p>
 
-            <p className="mt-2 text-3xl font-bold">
-              ₱{Number(statistics.total_saved || 0).toFixed(2)}
+            <p className="mt-2 text-3xl font-black">
+              ₱
+              {Number(
+                statistics.total_saved || 0
+              ).toLocaleString("en-PH", {
+                minimumFractionDigits: 2,
+              })}
             </p>
+
           </div>
 
           <div className="rounded-2xl border border-slate-800 bg-slate-900 p-6">
-            <p className="text-sm text-slate-400">
+
+            <p className="text-xs text-slate-400">
               ACTIVE MEMBERS
             </p>
 
-            <p className="mt-2 text-3xl font-bold">
+            <p className="mt-2 text-3xl font-black">
               {statistics.active_users || 0}
             </p>
+
           </div>
 
           <div className="rounded-2xl border border-slate-800 bg-slate-900 p-6">
-            <p className="text-sm text-slate-400">
+
+            <p className="text-xs text-slate-400">
               WEEKS COMPLETED
             </p>
 
-            <p className="mt-2 text-3xl font-bold">
+            <p className="mt-2 text-3xl font-black">
               {statistics.total_completed_weeks || 0}
             </p>
+
           </div>
 
           <div className="rounded-2xl border border-slate-800 bg-slate-900 p-6">
-            <p className="text-sm text-slate-400">
+
+            <p className="text-xs text-slate-400">
               TOTAL MEMBERS
             </p>
 
-            <p className="mt-2 text-3xl font-bold">
+            <p className="mt-2 text-3xl font-black">
               {statistics.total_users || 0}
             </p>
+
           </div>
+
+        </section>
+
+        {/* CONTROLS */}
+
+        <div className="flex flex-col sm:flex-row sm:justify-end gap-3 mb-5">
+
+          <button
+            onClick={() => router.push("/admin/report")}
+            className="w-full sm:w-auto rounded-xl bg-purple-500 px-5 py-3 font-bold hover:bg-purple-400"
+          >
+            📊 Savings Report
+          </button>
+
+          <button
+            onClick={loadAdminData}
+            className="w-full sm:w-auto rounded-xl bg-slate-800 px-5 py-3 font-semibold hover:bg-slate-700"
+          >
+            🔄 Refresh
+          </button>
 
         </div>
 
-{/* REPORT CONTROLS */}
+        {/* MEMBER SAVINGS */}
 
-<div className="flex flex-wrap justify-end gap-3 mb-5">
-  <button
-    onClick={() => router.push("/admin/report")}
-    className="rounded-xl bg-purple-500 px-4 py-2 text-sm font-bold text-white hover:bg-purple-400"
-  >
-    📊 Savings Report
-  </button>
+        <section className="mb-8 rounded-2xl border border-slate-800 bg-slate-900 overflow-hidden">
 
-  <button
-    onClick={loadAdminData}
-    className="rounded-xl bg-slate-800 px-4 py-2 text-sm font-semibold hover:bg-slate-700"
-  >
-    🔄 Refresh
-  </button>
-</div>
+          <div className="p-5 sm:p-6 border-b border-slate-800">
 
-{/* SAVINGS SUMMARY */}
-
-<section className="mb-8 rounded-2xl border border-slate-800 bg-slate-900 overflow-hidden">
-  <div className="p-6 border-b border-slate-800">
-    <p className="text-sm text-purple-400 font-semibold mb-2">
-      💰 SAVINGS SUMMARY
-    </p>
-
-    <h2 className="text-2xl font-bold">
-      Member Savings
-    </h2>
-
-    <p className="text-slate-400 mt-1">
-      Quick overview of how much each member has saved.
-    </p>
-  </div>
-
-  <div className="divide-y divide-slate-800">
-    {users
-      .filter((member) => member.role === "user")
-      .sort(
-        (a, b) =>
-          Number(b.total_saved || 0) -
-          Number(a.total_saved || 0)
-      )
-      .map((member) => (
-        <div
-          key={member.id}
-          className="flex items-center justify-between gap-4 px-6 py-5 hover:bg-slate-800/40"
-        >
-          <div>
-            <p className="font-semibold text-white">
-              {member.username}
+            <p className="text-sm text-purple-400 font-bold">
+              💰 SAVINGS SUMMARY
             </p>
 
-            <p className="text-sm text-slate-400 mt-1">
-              {member.completed_weeks} / 50 weeks completed
-            </p>
+            <h2 className="text-2xl font-black mt-1">
+              Member Savings
+            </h2>
+
           </div>
 
-          <div className="text-right">
-            <p className="text-lg font-bold text-emerald-400">
-              ₱{Number(member.total_saved || 0).toFixed(2)}
-            </p>
+          <div className="divide-y divide-slate-800">
 
-            <p className="text-xs text-slate-500">
-              {Number(member.progress || 0).toFixed(1)}% complete
-            </p>
+            {memberUsers
+              .sort(
+                (a, b) =>
+                  Number(b.total_saved || 0) -
+                  Number(a.total_saved || 0)
+              )
+              .map((member) => (
+
+                <div
+                  key={member.id}
+                  className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 px-5 sm:px-6 py-5 hover:bg-slate-800/40"
+                >
+
+                  <div>
+
+                    <p className="font-bold">
+                      {member.username}
+                    </p>
+
+                    <p className="text-sm text-slate-400 mt-1">
+                      {member.completed_weeks} / 50 weeks completed
+                    </p>
+
+                  </div>
+
+                  <div className="sm:text-right">
+
+                    <p className="text-xl font-black text-emerald-400">
+                      ₱
+                      {Number(
+                        member.total_saved || 0
+                      ).toLocaleString("en-PH", {
+                        minimumFractionDigits: 2,
+                      })}
+                    </p>
+
+                    <p className="text-xs text-slate-500">
+                      {Number(
+                        member.progress || 0
+                      ).toFixed(1)}
+                      % complete
+                    </p>
+
+                  </div>
+
+                </div>
+
+              ))}
+
           </div>
-        </div>
-      ))}
 
-    {users.filter((member) => member.role === "user").length === 0 && (
-      <div className="p-6 text-center text-slate-400">
-        No member savings found.
-      </div>
-    )}
-  </div>
-</section>
+        </section>
 
         {/* MEMBERS */}
 
         <section className="rounded-2xl border border-slate-800 bg-slate-900 overflow-hidden">
 
-          <div className="p-6 border-b border-slate-800">
+          <div className="p-5 sm:p-6 border-b border-slate-800">
 
-            <h2 className="text-2xl font-bold">
+            <h2 className="text-2xl font-black">
               👥 Members
             </h2>
 
-            <p className="text-slate-400 mt-1">
-              Manage member accounts and savings progress
+            <p className="text-sm text-slate-400 mt-1">
+              Manage member accounts and savings progress.
             </p>
 
           </div>
 
-          {/* DESKTOP TABLE */}
+          {/* DESKTOP */}
 
           <div className="hidden lg:block overflow-x-auto">
 
             <table className="w-full">
 
               <thead>
+
                 <tr className="border-b border-slate-800 text-left text-sm text-slate-400">
 
-                  <th className="px-6 py-4">
-                    Username
-                  </th>
-
-                  <th className="px-6 py-4">
-                    Role
-                  </th>
-
-                  <th className="px-6 py-4">
-                    Total Saved
-                  </th>
-
-                  <th className="px-6 py-4">
-                    Completed
-                  </th>
-
-                  <th className="px-6 py-4">
-                    Progress
-                  </th>
-
-                  <th className="px-6 py-4">
-                    Status
-                  </th>
-
-                  <th className="px-6 py-4">
-                    Actions
-                  </th>
+                  <th className="px-6 py-4">Username</th>
+                  <th className="px-6 py-4">Role</th>
+                  <th className="px-6 py-4">Total Saved</th>
+                  <th className="px-6 py-4">Completed</th>
+                  <th className="px-6 py-4">Progress</th>
+                  <th className="px-6 py-4">Status</th>
+                  <th className="px-6 py-4">Actions</th>
 
                 </tr>
+
               </thead>
 
               <tbody>
@@ -428,29 +763,28 @@ export default function AdminPage() {
 
                   <tr
                     key={member.id}
-                    className="border-b border-slate-800 last:border-b-0 hover:bg-slate-800/40"
+                    className="border-b border-slate-800 hover:bg-slate-800/40"
                   >
 
-                    <td className="px-6 py-5 font-semibold">
+                    <td className="px-6 py-5 font-bold">
                       {member.username}
                     </td>
 
                     <td className="px-6 py-5">
 
-                      {member.role === "admin" ? (
-                        <span className="rounded-full bg-purple-500/15 px-3 py-1 text-sm text-purple-300">
-                          ADMIN
-                        </span>
-                      ) : (
-                        <span className="rounded-full bg-blue-500/15 px-3 py-1 text-sm text-blue-300">
-                          USER
-                        </span>
-                      )}
+                      <span className="rounded-full bg-blue-500/15 px-3 py-1 text-sm text-blue-300">
+                        {member.role.toUpperCase()}
+                      </span>
 
                     </td>
 
-                    <td className="px-6 py-5 font-semibold">
-                      ₱{Number(member.total_saved || 0).toFixed(2)}
+                    <td className="px-6 py-5 font-bold">
+                      ₱
+                      {Number(
+                        member.total_saved || 0
+                      ).toLocaleString("en-PH", {
+                        minimumFractionDigits: 2,
+                      })}
                     </td>
 
                     <td className="px-6 py-5">
@@ -476,7 +810,10 @@ export default function AdminPage() {
                         </div>
 
                         <span className="text-sm text-slate-400">
-                          {Number(member.progress || 0).toFixed(1)}%
+                          {Number(
+                            member.progress || 0
+                          ).toFixed(1)}
+                          %
                         </span>
 
                       </div>
@@ -499,11 +836,9 @@ export default function AdminPage() {
 
                     <td className="px-6 py-5">
 
-                      <div className="flex flex-wrap gap-2">
+                      {member.role === "user" && (
 
-                        {/* VIEW */}
-
-                        {member.role === "user" && (
+                        <div className="flex flex-wrap gap-2">
 
                           <button
                             onClick={() =>
@@ -515,12 +850,6 @@ export default function AdminPage() {
                           >
                             👁 View
                           </button>
-
-                        )}
-
-                        {/* RESET */}
-
-                        {member.role === "user" && (
 
                           <button
                             onClick={() =>
@@ -534,13 +863,7 @@ export default function AdminPage() {
                             🔄 Reset
                           </button>
 
-                        )}
-
-                        {/* ACTIVATE / DEACTIVATE */}
-
-                        {member.role === "user" && (
-
-                          member.active ? (
+                          {member.active ? (
 
                             <button
                               onClick={() =>
@@ -568,13 +891,7 @@ export default function AdminPage() {
                               ▶ Activate
                             </button>
 
-                          )
-
-                        )}
-
-                        {/* DELETE */}
-
-                        {member.role === "user" && (
+                          )}
 
                           <button
                             onClick={() =>
@@ -588,9 +905,9 @@ export default function AdminPage() {
                             🗑 Delete
                           </button>
 
-                        )}
+                        </div>
 
-                      </div>
+                      )}
 
                     </td>
 
@@ -615,7 +932,7 @@ export default function AdminPage() {
                 className="p-5"
               >
 
-                <div className="flex items-start justify-between gap-4">
+                <div className="flex items-start justify-between gap-3">
 
                   <div>
 
@@ -623,7 +940,7 @@ export default function AdminPage() {
                       {member.username}
                     </h3>
 
-                    <p className="text-sm text-slate-400 mt-1">
+                    <p className="text-xs text-slate-400 mt-1">
                       {member.role.toUpperCase()}
                     </p>
 
@@ -641,35 +958,49 @@ export default function AdminPage() {
 
                 </div>
 
-                <div className="grid grid-cols-2 gap-4 mt-5">
+                <div className="grid grid-cols-2 gap-3 mt-5">
 
-                  <div>
+                  <div className="rounded-xl bg-slate-950/50 p-3">
                     <p className="text-xs text-slate-500">
                       TOTAL SAVED
                     </p>
-
-                    <p className="font-semibold mt-1">
-                      ₱{Number(member.total_saved || 0).toFixed(2)}
+                    <p className="font-bold mt-1">
+                      ₱
+                      {Number(
+                        member.total_saved || 0
+                      ).toLocaleString("en-PH", {
+                        minimumFractionDigits: 2,
+                      })}
                     </p>
                   </div>
 
-                  <div>
+                  <div className="rounded-xl bg-slate-950/50 p-3">
                     <p className="text-xs text-slate-500">
                       COMPLETED
                     </p>
-
-                    <p className="font-semibold mt-1">
+                    <p className="font-bold mt-1">
                       {member.completed_weeks} / 50
                     </p>
                   </div>
 
-                  <div>
+                  <div className="rounded-xl bg-slate-950/50 p-3">
                     <p className="text-xs text-slate-500">
                       PROGRESS
                     </p>
+                    <p className="font-bold mt-1">
+                      {Number(
+                        member.progress || 0
+                      ).toFixed(1)}
+                      %
+                    </p>
+                  </div>
 
-                    <p className="font-semibold mt-1">
-                      {Number(member.progress || 0).toFixed(1)}%
+                  <div className="rounded-xl bg-slate-950/50 p-3">
+                    <p className="text-xs text-slate-500">
+                      REMAINING
+                    </p>
+                    <p className="font-bold mt-1">
+                      {member.remaining_weeks} weeks
                     </p>
                   </div>
 
@@ -677,7 +1008,7 @@ export default function AdminPage() {
 
                 {member.role === "user" && (
 
-                  <div className="flex flex-wrap gap-2 mt-5">
+                  <div className="grid grid-cols-2 gap-2 mt-5">
 
                     <button
                       onClick={() =>
@@ -685,7 +1016,7 @@ export default function AdminPage() {
                           `/admin/member?id=${member.id}`
                         )
                       }
-                      className="px-3 py-2 rounded-lg bg-purple-500/20 text-purple-300"
+                      className="min-h-11 rounded-lg bg-purple-500/20 text-purple-300 font-medium"
                     >
                       👁 View
                     </button>
@@ -697,7 +1028,7 @@ export default function AdminPage() {
                           member.username
                         )
                       }
-                      className="px-3 py-2 rounded-lg bg-orange-500/20 text-orange-300"
+                      className="min-h-11 rounded-lg bg-orange-500/20 text-orange-300 font-medium"
                     >
                       🔄 Reset
                     </button>
@@ -711,7 +1042,7 @@ export default function AdminPage() {
                             member.username
                           )
                         }
-                        className="px-3 py-2 rounded-lg bg-yellow-500/20 text-yellow-300"
+                        className="min-h-11 rounded-lg bg-yellow-500/20 text-yellow-300 font-medium"
                       >
                         ⏸ Deactivate
                       </button>
@@ -725,7 +1056,7 @@ export default function AdminPage() {
                             member.username
                           )
                         }
-                        className="px-3 py-2 rounded-lg bg-emerald-500/20 text-emerald-300"
+                        className="min-h-11 rounded-lg bg-emerald-500/20 text-emerald-300 font-medium"
                       >
                         ▶ Activate
                       </button>
@@ -739,7 +1070,7 @@ export default function AdminPage() {
                           member.username
                         )
                       }
-                      className="px-3 py-2 rounded-lg bg-red-500/20 text-red-300"
+                      className="min-h-11 rounded-lg bg-red-500/20 text-red-300 font-medium"
                     >
                       🗑 Delete
                     </button>
@@ -754,25 +1085,10 @@ export default function AdminPage() {
 
           </div>
 
-          {users.length === 0 && (
-
-            <div className="p-10 text-center">
-
-              <div className="text-4xl mb-3">
-                👥
-              </div>
-
-              <p className="text-slate-400">
-                No members found.
-              </p>
-
-            </div>
-
-          )}
-
         </section>
 
       </div>
+
     </main>
   );
 }

@@ -410,7 +410,7 @@ function AdminMemberContent() {
 
   if (loading) {
     return (
-      <main className="min-h-screen bg-[#0d0d1c] text-white flex items-center justify-center px-6">
+      <main className="min-h-screen bg-[#0d0d1c] text-white flex items-center justify-center px-4 sm:px-6">
         <div className="text-center">
           <div className="text-5xl mb-4">
             💰
@@ -426,19 +426,19 @@ function AdminMemberContent() {
 
   if (!member) {
     return (
-      <main className="min-h-screen bg-[#0d0d1c] text-white px-6 py-8">
-        <div className="max-w-3xl mx-auto">
+      <main className="min-h-screen bg-[#0d0d1c] text-white px-4 sm:px-6 py-6 sm:py-8">
+        <div className="w-full max-w-3xl mx-auto">
 
           <button
             onClick={() =>
               router.push("/admin")
             }
-            className="mb-8 text-purple-300 hover:text-purple-200"
+            className="mb-6 sm:mb-8 text-purple-300 hover:text-purple-200"
           >
             ← Back to Admin
           </button>
 
-          <div className="rounded-2xl border border-red-500/20 bg-red-500/10 p-6">
+          <div className="rounded-2xl border border-red-500/20 bg-red-500/10 p-5 sm:p-6">
             <h1 className="text-xl font-bold">
               Member unavailable
             </h1>
@@ -455,26 +455,26 @@ function AdminMemberContent() {
   }
 
   return (
-    <main className="min-h-screen bg-[#0d0d1c] text-white px-6 py-8">
+    <main className="min-h-screen bg-[#0d0d1c] text-white px-3 sm:px-6 py-4 sm:py-8">
 
-      <div className="max-w-6xl mx-auto">
+      <div className="w-full max-w-6xl mx-auto">
 
         {/* TOP NAV */}
 
-        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-8">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4 mb-6 sm:mb-8">
 
           <button
             onClick={() =>
               router.push("/admin")
             }
-            className="text-purple-300 hover:text-purple-200 font-semibold"
+            className="text-purple-300 hover:text-purple-200 font-semibold text-left"
           >
             ← Back to Admin
           </button>
 
           <button
             onClick={signOut}
-            className="rounded-xl bg-red-500/15 px-4 py-3 text-red-300 hover:bg-red-500/25"
+            className="w-full sm:w-auto rounded-xl bg-red-500/15 px-4 py-3 text-red-300 hover:bg-red-500/25"
           >
             🚪 Sign Out
           </button>
@@ -483,13 +483,13 @@ function AdminMemberContent() {
 
         {/* MEMBER HEADER */}
 
-        <section className="mb-8">
+        <section className="mb-6 sm:mb-8">
 
           <p className="text-purple-400 font-semibold text-sm mb-2">
             MEMBER SAVINGS
           </p>
 
-          <h1 className="text-4xl md:text-5xl font-bold">
+          <h1 className="text-3xl sm:text-4xl md:text-5xl font-bold break-words">
             {member.username}
           </h1>
 
@@ -508,58 +508,58 @@ function AdminMemberContent() {
         {/* MESSAGE */}
 
         {message && (
-          <div className="mb-6 rounded-xl border border-slate-700 bg-slate-900 px-5 py-4 text-slate-200">
+          <div className="mb-6 rounded-xl border border-slate-700 bg-slate-900 px-4 sm:px-5 py-4 text-slate-200 break-words">
             {message}
           </div>
         )}
 
         {/* STATISTICS */}
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 mb-8">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-5 mb-6 sm:mb-8">
 
-          <div className="rounded-2xl border border-slate-800 bg-slate-900 p-6">
+          <div className="rounded-2xl border border-slate-800 bg-slate-900 p-4 sm:p-6">
 
             <p className="text-sm text-slate-400">
               Total Saved
             </p>
 
-            <p className="text-3xl font-bold mt-2">
+            <p className="text-2xl sm:text-3xl font-bold mt-2">
               ₱{totalSaved.toFixed(2)}
             </p>
 
           </div>
 
-          <div className="rounded-2xl border border-slate-800 bg-slate-900 p-6">
+          <div className="rounded-2xl border border-slate-800 bg-slate-900 p-4 sm:p-6">
 
             <p className="text-sm text-slate-400">
               Completed
             </p>
 
-            <p className="text-3xl font-bold mt-2">
+            <p className="text-2xl sm:text-3xl font-bold mt-2">
               {completedWeeks} / 50
             </p>
 
           </div>
 
-          <div className="rounded-2xl border border-slate-800 bg-slate-900 p-6">
+          <div className="rounded-2xl border border-slate-800 bg-slate-900 p-4 sm:p-6">
 
             <p className="text-sm text-slate-400">
               Remaining
             </p>
 
-            <p className="text-3xl font-bold mt-2">
+            <p className="text-2xl sm:text-3xl font-bold mt-2">
               {remainingWeeks}
             </p>
 
           </div>
 
-          <div className="rounded-2xl border border-slate-800 bg-slate-900 p-6">
+          <div className="rounded-2xl border border-slate-800 bg-slate-900 p-4 sm:p-6">
 
             <p className="text-sm text-slate-400">
               Progress
             </p>
 
-            <p className="text-3xl font-bold mt-2">
+            <p className="text-2xl sm:text-3xl font-bold mt-2">
               {progress.toFixed(1)}%
             </p>
 
@@ -568,7 +568,7 @@ function AdminMemberContent() {
               <div
                 className="h-full bg-purple-500 transition-all"
                 style={{
-                  width: `${progress}%`,
+                  width: `${Math.min(progress, 100)}%`,
                 }}
               />
 
@@ -582,17 +582,17 @@ function AdminMemberContent() {
 
         <section className="rounded-2xl border border-slate-800 bg-slate-900 overflow-hidden">
 
-          <div className="p-6 border-b border-slate-800">
+          <div className="p-4 sm:p-6 border-b border-slate-800">
 
             <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
 
-              <div>
+              <div className="min-w-0">
 
-                <h2 className="text-2xl font-bold">
+                <h2 className="text-xl sm:text-2xl font-bold">
                   50 Week Savings
                 </h2>
 
-                <p className="text-slate-400 mt-1">
+                <p className="text-slate-400 mt-1 break-words">
                   Manage {member.username}&apos;s weekly savings.
                 </p>
 
@@ -600,7 +600,7 @@ function AdminMemberContent() {
 
               <button
                 onClick={resetSavings}
-                className="rounded-xl bg-orange-500/15 px-4 py-3 text-orange-300 hover:bg-orange-500/25"
+                className="w-full md:w-auto rounded-xl bg-orange-500/15 px-4 py-3 text-orange-300 hover:bg-orange-500/25"
               >
                 🔄 Reset All
               </button>
@@ -644,8 +644,7 @@ function AdminMemberContent() {
                 {weeks.map((row) => {
 
                   const isEditing =
-                    editingWeek ===
-                    row.week;
+                    editingWeek === row.week;
 
                   return (
                     <tr
@@ -718,7 +717,7 @@ function AdminMemberContent() {
 
                         {isEditing ? (
 
-                          <div className="flex gap-2">
+                          <div className="flex flex-wrap gap-2">
 
                             <button
                               onClick={() =>
@@ -772,16 +771,15 @@ function AdminMemberContent() {
             {weeks.map((row) => {
 
               const isEditing =
-                editingWeek ===
-                row.week;
+                editingWeek === row.week;
 
               return (
                 <div
                   key={row.week}
-                  className="p-5"
+                  className="p-4 sm:p-5"
                 >
 
-                  <div className="flex items-center justify-between">
+                  <div className="flex items-center justify-between gap-3">
 
                     <h3 className="font-bold">
                       Week {row.week}
@@ -789,13 +787,13 @@ function AdminMemberContent() {
 
                     {row.saved ? (
 
-                      <span className="text-sm text-emerald-300">
+                      <span className="text-xs sm:text-sm text-emerald-300 whitespace-nowrap">
                         ✅ SAVED
                       </span>
 
                     ) : (
 
-                      <span className="text-sm text-slate-500">
+                      <span className="text-xs sm:text-sm text-slate-500 whitespace-nowrap">
                         NOT SAVED
                       </span>
 
@@ -829,7 +827,7 @@ function AdminMemberContent() {
                                 event.target.value
                               )
                             }
-                            className="flex-1 rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-white outline-none focus:border-purple-500"
+                            className="min-w-0 flex-1 rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-white outline-none focus:border-purple-500"
                           />
 
                         </div>
@@ -853,7 +851,7 @@ function AdminMemberContent() {
 
                     {isEditing ? (
 
-                      <div className="flex gap-2">
+                      <div className="flex flex-col sm:flex-row gap-2">
 
                         <button
                           onClick={() =>
@@ -917,7 +915,7 @@ export default function AdminMemberPage() {
   return (
     <Suspense
       fallback={
-        <main className="min-h-screen bg-[#0d0d1c] text-white flex items-center justify-center px-6">
+        <main className="min-h-screen bg-[#0d0d1c] text-white flex items-center justify-center px-4 sm:px-6">
 
           <div className="text-center">
 
